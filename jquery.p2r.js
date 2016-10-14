@@ -4,12 +4,12 @@
     // Class Definition
     var PullToRefresh = function (element, options) {
         this.$element = $(element);
-        
+
         this.options = $.extend({}, self.DEFAULTS, options);
-        
+
         this.$scroll = $(options.scroll);
-        
-        
+
+
         this.flags = {
             prevented: false,
             moving: false,
@@ -22,7 +22,9 @@
             startY: 0,
             startX: 0,
             lastStep: 0,
-        }
+        };
+
+        this.deferredFunctionOnRefresh = null;
     };
 
 
@@ -50,7 +52,7 @@
             eventName,
             PullToRefresh.key
         ].join(".");
-    }
+    };
 
     // support detection on touch events
     PullToRefresh.support = {
@@ -70,7 +72,7 @@
                 start: PullToRefresh.namespace('touchstart'),
                 move: PullToRefresh.namespace('touchmove'),
                 end: PullToRefresh.namespace('touchend')
-            }
+            };
         }
 
         var events = {
@@ -143,7 +145,7 @@
         if (has_bind) {
             return function _pulltorefresh__bind(fn, context) {
                 return fn.bind(context);
-            }
+            };
         } else {
             // if lib has proxy
             if ($.proxy) {
@@ -176,7 +178,7 @@
                     proxy.guid = fn.guid = fn.guid || jQuery.guid++;
 
                     return proxy;
-                }
+                };
             }
         }
 
@@ -193,9 +195,9 @@
         style.webkitTransform = 'translate(0, ' + value + 'px) ' + 'translateZ(0)';
         style.msTransform =
             style.MsTransform =
-                style.MozTransform =
-                    style.OTransform =
-                        style.transform = 'translateY(' + value + 'px)';
+            style.MozTransform =
+            style.OTransform =
+            style.transform = 'translateY(' + value + 'px)';
     };
 
 
@@ -208,9 +210,9 @@
     PullToRefresh.prototype.transition = function _pullToRefresh__transition(style, ms) {
         style.webkitTransitionDuration =
             style.MozTransitionDuration =
-                style.msTransitionDuration =
-                    style.OTransitionDuration =
-                        style.transitionDuration = ms;
+            style.msTransitionDuration =
+            style.OTransitionDuration =
+            style.transitionDuration = ms;
     };
 
     /**
@@ -221,9 +223,9 @@
     PullToRefresh.prototype.remove_transition = function _pullToRefresh__remove_transition(style) {
         style.webkitTransitionDuration =
             style.MozTransitionDuration =
-                style.msTransitionDuration =
-                    style.OTransitionDuration =
-                        style.transitionDuration = null;
+            style.msTransitionDuration =
+            style.OTransitionDuration =
+            style.transitionDuration = null;
     };
 
     /**
@@ -234,10 +236,10 @@
     PullToRefresh.prototype.remove_transform = function _pulltorefresh__remove_transform(style) {
         style.webkitTransform =
             style.msTransform =
-                style.MsTransform =
-                    style.MozTransform =
-                        style.OTransform =
-                            style.transform = null;
+            style.MsTransform =
+            style.MozTransform =
+            style.OTransform =
+            style.transform = null;
     };
 
 
@@ -252,9 +254,9 @@
         return {
             x: isTouchEvent ? (event.targetTouches || event.originalEvent.targetTouches)[0].pageX : (event.pageX || event.clientX),
             y: isTouchEvent ? (event.targetTouches || event.originalEvent.targetTouches)[0].pageY : (event.pageY || event.clientY)
-        }
+        };
 
-    }
+    };
 
     /**
      * method to listen event start
@@ -282,7 +284,7 @@
         this.positions.startY = axis.y;
         this.positions.startX = axis.x;
 
-        this.$element.trigger(PullToRefresh.namespace('start'), [axis.y])
+        this.$element.trigger(PullToRefresh.namespace('start'), [axis.y]);
 
         this.transition(this.$element[0].style, "0ms");
 
@@ -323,7 +325,9 @@
 
         // reset on horizontal scroll threshold fail
         if (Math.abs(axis.x - this.positions.startX) > this.options.threshold) {
-            this.reset();
+            this.reset({
+                refresh_fail: true
+            });
             return;
         }
 
@@ -344,7 +348,9 @@
 
             // if configured to reset on refresh, do it
             if (this.options.resetRefresh) {
-                this.reset();
+                this.reset({
+                    refresh_fail: false
+                });
                 return;
             }
 
@@ -374,9 +380,20 @@
      * Method to listen the end of user action
      * @method
      */
-    PullToRefresh.prototype.reset = function _pulltorefresh__reset() {
-        this.transition(this.$element[0].style, this.options.resetSpeed);
-        this.transform(this.$element[0].style, 0);
+    PullToRefresh.prototype.reset = function _pulltorefresh__reset(data) {
+        if (this.deferredFunctionOnRefresh == null || data.refresh_fail) {
+            this.transition(this.$element[0].style, this.options.resetSpeed);
+            this.transform(this.$element[0].style, 0);
+        } else {
+            var that = this;
+
+            this.transition(this.$element[0].style, this.options.resetSpeed);
+            this.transform(this.$element[0].style, this.options.refresh);
+            that.deferredFunctionOnRefresh.done(function (response) {
+                that.transform(that.$element[0].style, 0);
+                that.deferredFunctionOnRefresh = $.Deferred();
+            });
+        }
         this.flags.touched = false;
         this.flags.isTouch = false;
         this.flags.refreshed = false;
@@ -399,7 +416,9 @@
         this.positions.startY = 0;
         this.positions.startX = 0;
 
-        this.reset();
+        this.reset({
+            refresh_fail: true
+        });
 
         this.$element.trigger(PullToRefresh.namespace('end'));
 
@@ -420,13 +439,13 @@
             var $this = $(this);
             var data = $this.data(PullToRefresh.key);
 
-            var options = $.extend({}, PullToRefresh.DEFAULTS, $this.data(), typeof option == 'object' && option)
+            var options = $.extend({}, PullToRefresh.DEFAULTS, $this.data(), typeof option == 'object' && option);
 
             if (!data && option == 'destroy') return PullToRefresh.destroy();
 
             if (!data) {
 
-                $this.data(PullToRefresh.key, (data = new PullToRefresh(this, options)))
+                $this.data(PullToRefresh.key, (data = new PullToRefresh(this, options)));
 
                 if (options.autoInit) {
 
@@ -435,7 +454,7 @@
             }
 
             if (typeof option == 'string') {
-                data[option].apply(data)
+                data[option].apply(data);
             }
 
         });
@@ -448,8 +467,8 @@
     // ==================
 
     $.fn.pullToRefresh.noConflict = function () {
-        $.fn.pullToRefresh = old
-        return this
-    }
+        $.fn.pullToRefresh = old;
+        return this;
+    };
 
 })(window.jQuery || window.Zepto, document);
